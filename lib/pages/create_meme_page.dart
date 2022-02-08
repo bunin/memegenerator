@@ -163,6 +163,7 @@ class BottomList extends StatelessWidget {
         bloc.observeMemeTexts(),
         bloc.observeSelectedMemeText(),
       ),
+      initialData: Tuple2(const <MemeText>[], null),
       builder: (context, snapshots) {
         final memeTexts = snapshots.item1.hasData
             ? snapshots.item1.data!
@@ -170,23 +171,20 @@ class BottomList extends StatelessWidget {
         final selectedMemeText =
             snapshots.item2.hasData ? snapshots.item2.data : null;
         return ListView.separated(
-          itemCount: memeTexts.length + 3,
+          itemCount: memeTexts.length + 1,
           itemBuilder: (context, index) {
             switch (index) {
               case 0:
-              case 2:
-                return const SizedBox(height: 12);
-              case 1:
                 return const AddNewMemeTextButton();
               default:
                 return BottomMemeTextItem(
-                  memeText: memeTexts[index - 3],
-                  selected: memeTexts[index - 3].id == selectedMemeText?.id,
+                  memeText: memeTexts[index - 1],
+                  selected: memeTexts[index - 1].id == selectedMemeText?.id,
                 );
             }
           },
           separatorBuilder: (BuildContext context, int index) {
-            if (index < 3) {
+            if (index < 1) {
               return SizedBox.shrink();
             }
             return Container(
