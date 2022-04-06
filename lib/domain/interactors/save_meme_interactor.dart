@@ -58,7 +58,7 @@ class SaveMemeInteractor {
           counter = 0;
         } else {
           counter = int.parse(baseParts.last);
-          baseName = baseParts.join("_");
+          baseName = baseParts.getRange(0, baseParts.length - 1).join("_");
         }
         counter++;
         newImagePath =
