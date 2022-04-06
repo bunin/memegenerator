@@ -1,9 +1,9 @@
 import 'dart:convert';
 
+import 'package:collection/collection.dart';
 import 'package:memogenerator/data/models/meme.dart';
 import 'package:memogenerator/data/shared_preference_data.dart';
 import 'package:rxdart/rxdart.dart';
-import 'package:collection/collection.dart';
 
 class MemesRepository {
   final updater = PublishSubject<Null>();
@@ -16,11 +16,15 @@ class MemesRepository {
 
   MemesRepository._internal(this.spData);
 
-  Future<bool> addToMemes(final Meme meme) async {
-    final rawMemes = await spData.getMemes();
-    rawMemes.add(json.encode(meme.toJson()));
-    updater.add(null);
-    return spData.setMemes(rawMemes);
+  Future<bool> addToMemes(final Meme newMeme) async {
+    final memes = await getMemes();
+    final index = memes.indexWhere((meme) => meme.id == newMeme.id);
+    if (index < 0) {
+      memes.add(newMeme);
+    } else {
+      memes[index] = newMeme;
+    }
+    return setMemes(memes);
   }
 
   Future<bool> removeFromMemes(final String id) async {
@@ -33,7 +37,7 @@ class MemesRepository {
   Future<List<Meme>> getMemes() async {
     return (await spData.getMemes())
         .map((e) => Meme.fromJson(json.decode(e)))
-        .toList(growable: false);
+        .toList(growable: true);
   }
 
   Future<bool> setMemes(final List<Meme> memes) async {

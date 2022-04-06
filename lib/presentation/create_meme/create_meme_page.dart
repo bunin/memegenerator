@@ -200,7 +200,7 @@ class BottomList extends StatelessWidget {
               case 0:
                 return const AddNewMemeTextButton();
               default:
-                return BottomMemeTextItem(
+                return BottomMemeText(
                   memeText: memeTexts[index - 1],
                   selected: memeTexts[index - 1].id == selectedMemeText?.id,
                 );
@@ -222,8 +222,8 @@ class BottomList extends StatelessWidget {
   }
 }
 
-class BottomMemeTextItem extends StatelessWidget {
-  const BottomMemeTextItem({
+class BottomMemeText extends StatelessWidget {
+  const BottomMemeText({
     Key? key,
     required this.memeText,
     required this.selected,
@@ -234,21 +234,26 @@ class BottomMemeTextItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 48,
-      alignment: Alignment.centerLeft,
-      padding: EdgeInsets.symmetric(
-        vertical: 0,
-        horizontal: 16,
-      ),
-      color: selected ? AppColors.darkGrey16 : null,
-      child: Text(
-        memeText.text,
-        style: TextStyle(
-          fontWeight: FontWeight.w400,
-          fontSize: 16,
-          fontFamily: 'Roboto',
-          color: AppColors.darkGrey,
+    final bloc = Provider.of<CreateMemeBloc>(context, listen: false);
+    return GestureDetector(
+      onTap: () => bloc.selectMemeText(memeText.id),
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        height: 48,
+        alignment: Alignment.centerLeft,
+        padding: EdgeInsets.symmetric(
+          vertical: 0,
+          horizontal: 16,
+        ),
+        color: selected ? AppColors.darkGrey16 : null,
+        child: Text(
+          memeText.text,
+          style: TextStyle(
+            fontWeight: FontWeight.w400,
+            fontSize: 16,
+            fontFamily: 'Roboto',
+            color: AppColors.darkGrey,
+          ),
         ),
       ),
     );
@@ -336,6 +341,14 @@ class _DraggableMemeTextState extends State<DraggableMemeText> {
         widget.parentConstraints.maxHeight / 2;
     left = widget.memeTextWithOffset.offset?.dx ??
         widget.parentConstraints.maxWidth / 3;
+    if (widget.memeTextWithOffset.offset != null) {
+      return;
+    }
+    WidgetsBinding.instance?.addPostFrameCallback((timeStamp) {
+      final bloc = Provider.of<CreateMemeBloc>(context, listen: false);
+      bloc.changeMemeTextOffset(
+          widget.memeTextWithOffset.id, Offset(left, top));
+    });
   }
 
   @override
