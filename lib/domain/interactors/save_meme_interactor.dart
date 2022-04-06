@@ -50,7 +50,7 @@ class SaveMemeInteractor {
         if (nameParts.length < 2) {
           baseName = nameParts.join(".");
         } else {
-          baseName = nameParts.getRange(0, nameParts.length - 2).join(".");
+          baseName = nameParts.getRange(0, nameParts.length - 1).join(".");
           ext = nameParts.last;
         }
         final baseParts = baseName.split("_");
