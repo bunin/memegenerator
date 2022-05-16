@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:ui';
 
 import 'package:collection/collection.dart';
@@ -7,10 +8,13 @@ import 'package:memogenerator/data/models/position.dart';
 import 'package:memogenerator/data/models/text_with_position.dart';
 import 'package:memogenerator/data/repositories/memes_repository.dart';
 import 'package:memogenerator/domain/interactors/save_meme_interactor.dart';
+import 'package:memogenerator/domain/interactors/screenshot_interactor.dart';
 import 'package:memogenerator/presentation/create_meme/models/meme_text.dart';
 import 'package:memogenerator/presentation/create_meme/models/meme_text_offset.dart';
 import 'package:memogenerator/presentation/create_meme/models/meme_text_with_offset.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:rxdart/rxdart.dart';
+import 'package:screenshot/screenshot.dart';
 import 'package:uuid/uuid.dart';
 
 class CreateMemeBloc {
@@ -23,10 +27,15 @@ class CreateMemeBloc {
   final newMemeTextOffsetSubject =
       BehaviorSubject<MemeTextOffset?>.seeded(null);
   final memePathSubject = BehaviorSubject<String?>.seeded(null);
+  final screenshotControllerSubject =
+      BehaviorSubject<ScreenshotController>.seeded(
+    ScreenshotController(),
+  );
 
   StreamSubscription<MemeTextOffset?>? newMemeTextOffsetSubscription;
   StreamSubscription<bool>? saveMemeSubscription;
   StreamSubscription<Meme?>? existentMemeSubscription;
+  StreamSubscription<void>? shareMemeSubscription;
 
   CreateMemeBloc({
     final String? id,
@@ -38,6 +47,35 @@ class CreateMemeBloc {
     _subscribeToExistentMeme();
   }
 
+  Future<bool> isAllSaved() async {
+    final savedMeme = await MemesRepository.getInstance().getMeme(id);
+    if (savedMeme == null) {
+      return false;
+    }
+
+    final savedMemeTexts = savedMeme.texts.map((textWithPosition) {
+      return MemeText.createFromTextWithPosition(textWithPosition);
+    }).toList(growable: false);
+    final savedMemeTextOffsets = savedMeme.texts.map((textWithPosition) {
+      return MemeTextOffset(
+        id: textWithPosition.id,
+        offset: Offset(
+          textWithPosition.position.left,
+          textWithPosition.position.top,
+        ),
+      );
+    }).toList(growable: false);
+
+    return DeepCollectionEquality.unordered().equals(
+          savedMemeTexts,
+          memeTextsSubject.value,
+        ) &&
+        DeepCollectionEquality.unordered().equals(
+          savedMemeTextOffsets,
+          memeTextOffsetsSubject.value,
+        );
+  }
+
   void _subscribeToExistentMeme() {
     existentMemeSubscription =
         MemesRepository.getInstance().getMeme(this.id).asStream().listen(
@@ -46,7 +84,7 @@ class CreateMemeBloc {
           return;
         }
         final memeTexts = meme.texts.map((textWithPosition) {
-          return MemeText(id: textWithPosition.id, text: textWithPosition.text);
+          return MemeText.createFromTextWithPosition(textWithPosition);
         }).toList(growable: false);
         final memeTextOffsets = meme.texts.map((textWithPosition) {
           return MemeTextOffset(
@@ -59,12 +97,54 @@ class CreateMemeBloc {
         }).toList(growable: false);
         memeTextsSubject.add(memeTexts);
         memeTextOffsetsSubject.add(memeTextOffsets);
-        memePathSubject.add(meme.memePath);
+        if (meme.memePath != null) {
+          getApplicationDocumentsDirectory().then((docsDirectory) {
+            memePathSubject.add(
+              [
+                docsDirectory.absolute.path,
+                SaveMemeInteractor.memesPathName,
+                meme.memePath,
+              ].join(Platform.pathSeparator),
+            );
+          });
+        }
       },
       onError: (error, stackTrace) => print(
         "Error in existentMemeSubscription: $error, $stackTrace",
       ),
     );
+  }
+
+  void shareScreenshot() {
+    shareMemeSubscription?.cancel();
+    shareMemeSubscription = ScreenshotInteractor.getInstance()
+        .shareScreenshot(screenshotControllerSubject.value.capture())
+        .asStream()
+        .listen(
+          (event) {},
+          onError: (error, stackTrace) => print(
+            "Error in shareMemeSubscription: $error, $stackTrace",
+          ),
+        );
+  }
+
+  void changeFontSettings(
+    final String textId,
+    final Color color,
+    final double fontSize,
+    final FontWeight fontWeight,
+  ) {
+    final copiedList = [...memeTextsSubject.value];
+    final index = copiedList.indexWhere((memeText) => memeText.id == textId);
+    if (index < 0) {
+      return;
+    }
+    copiedList[index] = copiedList[index].copyWithChangedFontSettings(
+      color,
+      fontSize,
+      fontWeight,
+    );
+    memeTextsSubject.add(copiedList);
   }
 
   void saveMeme() {
@@ -80,6 +160,9 @@ class CreateMemeBloc {
           left: memeTextPosition?.offset.dx ?? 0,
           top: memeTextPosition?.offset.dy ?? 0,
         ),
+        color: memeText.color,
+        fontSize: memeText.fontSize,
+        fontWeight: memeText.fontWeight,
       );
     }).toList(growable: false);
 
@@ -88,6 +171,7 @@ class CreateMemeBloc {
           id: id,
           textWithPositions: textsWithPositions,
           imagePath: memePathSubject.value,
+          screenshotController: screenshotControllerSubject.value,
         )
         .asStream()
         .listen(
@@ -137,13 +221,19 @@ class CreateMemeBloc {
     selectedMemeTextSubject.add(newMemeText);
   }
 
+  void deleteMemeText(final String textId) {
+    final copiedList = [...memeTextsSubject.value];
+    copiedList.removeWhere((memeText) => memeText.id == textId);
+    memeTextsSubject.add(copiedList);
+  }
+
   void changeMemeText(final String id, final String text) {
     final copiedList = [...memeTextsSubject.value];
     final index = copiedList.indexWhere((memeText) => memeText.id == id);
     if (index < 0) {
       return;
     }
-    copiedList[index] = MemeText(id: id, text: text);
+    copiedList[index] = copiedList[index].copyWithChangedText(text);
     memeTextsSubject.add(copiedList);
   }
 
@@ -164,6 +254,9 @@ class CreateMemeBloc {
   Stream<MemeText?> observeSelectedMemeText() =>
       selectedMemeTextSubject.distinct();
 
+  Stream<ScreenshotController> observeScreenshotController() =>
+      screenshotControllerSubject.distinct();
+
   Stream<List<MemeTextWithOffset>> observeMemeTextWithOffsets() {
     return Rx.combineLatest2<List<MemeText>, List<MemeTextOffset>,
             List<MemeTextWithOffset>>(
@@ -173,8 +266,7 @@ class CreateMemeBloc {
         final memeTextOffset = memeTextOffsets
             .firstWhereOrNull((element) => element.id == memeText.id);
         return MemeTextWithOffset(
-          id: memeText.id,
-          text: memeText.text,
+          memeText: memeText,
           offset: memeTextOffset?.offset,
         );
       }).toList(growable: false);
@@ -187,9 +279,11 @@ class CreateMemeBloc {
     memeTextOffsetsSubject.close();
     newMemeTextOffsetSubject.close();
     memePathSubject.close();
+    screenshotControllerSubject.close();
 
     newMemeTextOffsetSubscription?.cancel();
     saveMemeSubscription?.cancel();
     existentMemeSubscription?.cancel();
+    shareMemeSubscription?.cancel();
   }
 }

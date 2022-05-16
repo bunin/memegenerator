@@ -2,11 +2,15 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:memogenerator/presentation/create_meme/create_meme_bloc.dart';
+import 'package:memogenerator/presentation/create_meme/font_settings_bottom_sheet.dart';
+import 'package:memogenerator/presentation/create_meme/meme_text_on_canvas.dart';
 import 'package:memogenerator/presentation/create_meme/models/meme_text.dart';
 import 'package:memogenerator/presentation/create_meme/models/meme_text_with_offset.dart';
+import 'package:memogenerator/presentation/widgets/app_button.dart';
 import 'package:memogenerator/resources/app_colors.dart';
 import 'package:multiple_stream_builder/multiple_stream_builder.dart';
 import 'package:provider/provider.dart';
+import 'package:screenshot/screenshot.dart';
 
 class CreateMemePage extends StatefulWidget {
   final String? id;
@@ -35,30 +39,50 @@ class _CreateMemePageState extends State<CreateMemePage> {
   Widget build(BuildContext context) {
     return Provider.value(
       value: bloc,
-      child: Scaffold(
-        resizeToAvoidBottomInset: false,
-        appBar: AppBar(
-          backgroundColor: AppColors.lemon,
-          foregroundColor: AppColors.darkGrey,
-          title: Text(
-            'Создаем мем',
-          ),
-          bottom: EditTextBar(),
-          actions: [
-            GestureDetector(
-              onTap: bloc.saveMeme,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Icon(
-                  Icons.save,
-                  color: AppColors.darkGrey,
+      child: WillPopScope(
+        onWillPop: () async {
+          final allSaved = await bloc.isAllSaved();
+          if (allSaved) {
+            return true;
+          }
+          final goBack = await showConfirmation(context);
+          return goBack ?? false;
+        },
+        child: Scaffold(
+          resizeToAvoidBottomInset: false,
+          appBar: AppBar(
+            backgroundColor: AppColors.lemon,
+            foregroundColor: AppColors.darkGrey,
+            title: Text(
+              'Создаем мем',
+            ),
+            bottom: EditTextBar(),
+            actions: [
+              GestureDetector(
+                onTap: bloc.shareScreenshot,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Icon(
+                    Icons.share,
+                    color: AppColors.darkGrey,
+                  ),
                 ),
               ),
-            ),
-          ],
+              GestureDetector(
+                onTap: bloc.saveMeme,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Icon(
+                    Icons.save,
+                    color: AppColors.darkGrey,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: Colors.white,
+          body: SafeArea(child: CreateMemePageContent()),
         ),
-        backgroundColor: Colors.white,
-        body: SafeArea(child: CreateMemePageContent()),
       ),
     );
   }
@@ -67,6 +91,29 @@ class _CreateMemePageState extends State<CreateMemePage> {
   void dispose() {
     bloc.dispose();
     super.dispose();
+  }
+
+  Future<bool?> showConfirmation(BuildContext context) {
+    return showDialog(
+        context: context,
+        builder: (context) {
+          return AlertDialog(
+            title: Text("Хотите выйти?"),
+            actionsPadding: const EdgeInsets.symmetric(horizontal: 16),
+            content: Text("Вы потеряете несохраненные изменения"),
+            actions: [
+              AppButton(
+                onTap: () => Navigator.of(context).pop(false),
+                text: "Отмена",
+                color: AppColors.darkGrey,
+              ),
+              AppButton(
+                onTap: () => Navigator.of(context).pop(true),
+                text: "Выйти",
+              ),
+            ],
+          );
+        });
   }
 }
 
@@ -241,20 +288,71 @@ class BottomMemeText extends StatelessWidget {
       child: Container(
         height: 48,
         alignment: Alignment.centerLeft,
-        padding: EdgeInsets.symmetric(
-          vertical: 0,
-          horizontal: 16,
-        ),
         color: selected ? AppColors.darkGrey16 : null,
-        child: Text(
-          memeText.text,
-          style: TextStyle(
-            fontWeight: FontWeight.w400,
-            fontSize: 16,
-            fontFamily: 'Roboto',
-            color: AppColors.darkGrey,
-          ),
+        child: Row(
+          children: [
+            const SizedBox(width: 16),
+            Expanded(
+              child: Text(
+                memeText.text,
+                style: TextStyle(
+                  fontWeight: FontWeight.w400,
+                  fontSize: 16,
+                  fontFamily: 'Roboto',
+                  color: AppColors.darkGrey,
+                ),
+              ),
+            ),
+            const SizedBox(width: 4),
+            BottomTextMemeAction(
+              icon: Icons.font_download_outlined,
+              onTap: () {
+                showModalBottomSheet(
+                  shape: const RoundedRectangleBorder(
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(24),
+                    ),
+                  ),
+                  context: context,
+                  builder: (context) {
+                    return Provider.value(
+                      value: bloc,
+                      child: FontSettingBottomSheet(memeText: memeText),
+                    );
+                  },
+                );
+              },
+            ),
+            const SizedBox(width: 4),
+            BottomTextMemeAction(
+              onTap: () => bloc.deleteMemeText(memeText.id),
+              icon: Icons.delete_forever_outlined,
+            ),
+            SizedBox.shrink(),
+          ],
         ),
+      ),
+    );
+  }
+}
+
+class BottomTextMemeAction extends StatelessWidget {
+  const BottomTextMemeAction({
+    Key? key,
+    required this.onTap,
+    required this.icon,
+  }) : super(key: key);
+
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.all(8),
+        child: Icon(icon),
       ),
     );
   }
@@ -276,42 +374,78 @@ class MemeCanvasWidget extends StatelessWidget {
         alignment: Alignment.topCenter,
         child: AspectRatio(
           aspectRatio: 1,
-          child: Stack(
-            children: [
-              StreamBuilder<String?>(
-                  stream: bloc.observeMemePath(),
-                  builder: (context, snapshot) {
-                    final path = snapshot.hasData ? snapshot.data! : null;
-                    if (path == null) {
-                      return Container(
-                        color: Colors.white,
-                      );
-                    }
-                    return Image.file(File(path));
-                  }),
-              StreamBuilder<List<MemeTextWithOffset>>(
-                  stream: bloc.observeMemeTextWithOffsets(),
-                  initialData: const <MemeTextWithOffset>[],
-                  builder: (context, snapshot) {
-                    final memeTextWithOffsets = snapshot.hasData
-                        ? snapshot.data!
-                        : const <MemeTextWithOffset>[];
-                    return LayoutBuilder(
-                      builder: (context, constraints) => Stack(
-                        children: memeTextWithOffsets.map((memeTextWithOffset) {
-                          return DraggableMemeText(
-                            memeTextWithOffset: memeTextWithOffset,
-                            parentConstraints: constraints,
-                          );
-                        }).toList(growable: false),
-                      ),
-                    );
-                  }),
-            ],
-          ),
+          child: StreamBuilder<ScreenshotController>(
+              stream: bloc.observeScreenshotController(),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) {
+                  return SizedBox.shrink();
+                }
+                return Screenshot(
+                  controller: snapshot.requireData,
+                  child: Stack(
+                    children: [
+                      BackgroundImage(),
+                      MemeTexts(),
+                    ],
+                  ),
+                );
+              }),
         ),
       ),
     );
+  }
+}
+
+class MemeTexts extends StatelessWidget {
+  const MemeTexts({
+    Key? key,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    final bloc = Provider.of<CreateMemeBloc>(context, listen: false);
+    return StreamBuilder<List<MemeTextWithOffset>>(
+        stream: bloc.observeMemeTextWithOffsets(),
+        initialData: const <MemeTextWithOffset>[],
+        builder: (context, snapshot) {
+          final memeTextWithOffsets =
+              snapshot.hasData ? snapshot.data! : const <MemeTextWithOffset>[];
+          return LayoutBuilder(
+            builder: (context, constraints) => Stack(
+              children: memeTextWithOffsets.map((memeTextWithOffset) {
+                return DraggableMemeText(
+                  key: ValueKey(
+                    memeTextWithOffset.memeText.id,
+                  ),
+                  memeTextWithOffset: memeTextWithOffset,
+                  parentConstraints: constraints,
+                );
+              }).toList(growable: false),
+            ),
+          );
+        });
+  }
+}
+
+class BackgroundImage extends StatelessWidget {
+  const BackgroundImage({
+    Key? key,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    final bloc = Provider.of<CreateMemeBloc>(context, listen: false);
+    return StreamBuilder<String?>(
+        stream: bloc.observeMemePath(),
+        builder: (context, snapshot) {
+          final path = snapshot.hasData ? snapshot.data! : null;
+          if (path == null) {
+            return Container(
+              color: Colors.white,
+            );
+          }
+          return Image.file(File(path));
+        });
   }
 }
 
@@ -347,7 +481,7 @@ class _DraggableMemeTextState extends State<DraggableMemeText> {
     WidgetsBinding.instance?.addPostFrameCallback((timeStamp) {
       final bloc = Provider.of<CreateMemeBloc>(context, listen: false);
       bloc.changeMemeTextOffset(
-          widget.memeTextWithOffset.id, Offset(left, top));
+          widget.memeTextWithOffset.memeText.id, Offset(left, top));
     });
   }
 
@@ -360,41 +494,33 @@ class _DraggableMemeTextState extends State<DraggableMemeText> {
       left: left,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onPanStart: (_) => bloc.selectMemeText(widget.memeTextWithOffset.id),
+        onPanStart: (_) => bloc.selectMemeText(
+          widget.memeTextWithOffset.memeText.id,
+        ),
         onPanUpdate: (details) {
           setState(() {
             top = calculateTop(details);
             left = calculateLeft(details);
             bloc.changeMemeTextOffset(
-                widget.memeTextWithOffset.id, Offset(left, top));
+              widget.memeTextWithOffset.memeText.id,
+              Offset(left, top),
+            );
           });
         },
-        onTap: () => bloc.selectMemeText(widget.memeTextWithOffset.id),
+        onTap: () => bloc.selectMemeText(widget.memeTextWithOffset.memeText.id),
         child: StreamBuilder<MemeText?>(
             stream: bloc.observeSelectedMemeText(),
             builder: (context, snapshot) {
               final selected = snapshot.hasData &&
-                  snapshot.data?.id == widget.memeTextWithOffset.id;
-              return Container(
-                padding: const EdgeInsets.all(padding),
-                decoration: selected
-                    ? BoxDecoration(
-                        color: AppColors.darkGrey16,
-                        border: Border.all(color: AppColors.fuchsia, width: 1),
-                      )
-                    : null,
-                constraints: BoxConstraints(
-                  maxWidth: widget.parentConstraints.maxWidth,
-                  maxHeight: widget.parentConstraints.maxHeight,
-                ),
-                child: Text(
-                  widget.memeTextWithOffset.text,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: Colors.black,
-                    fontSize: 24,
-                  ),
-                ),
+                  snapshot.data?.id == widget.memeTextWithOffset.memeText.id;
+              return MemeTextOnCanvas(
+                padding: padding,
+                selected: selected,
+                parentConstraints: widget.parentConstraints,
+                text: widget.memeTextWithOffset.memeText.text,
+                fontSize: widget.memeTextWithOffset.memeText.fontSize,
+                color: widget.memeTextWithOffset.memeText.color,
+                fontWeight: widget.memeTextWithOffset.memeText.fontWeight,
               );
             }),
       ),
@@ -432,26 +558,13 @@ class AddNewMemeTextButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bloc = Provider.of<CreateMemeBloc>(context, listen: false);
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () => bloc.addNewText(),
+    return Padding(
+      padding: const EdgeInsets.only(top: 16),
       child: Center(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.add, color: AppColors.fuchsia),
-              const SizedBox(width: 8),
-              Text(
-                "Добавить текст".toUpperCase(),
-                style: TextStyle(
-                    color: AppColors.fuchsia,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500),
-              ),
-            ],
-          ),
+        child: AppButton(
+          onTap: bloc.addNewText,
+          text: "Добавить текст",
+          icon: Icons.add,
         ),
       ),
     );

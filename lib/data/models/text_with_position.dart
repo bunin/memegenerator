@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+import 'package:flutter/material.dart';
 import 'package:json_annotation/json_annotation.dart';
 import 'package:memogenerator/data/models/position.dart';
 
@@ -9,11 +10,19 @@ class TextWithPosition extends Equatable {
   final String id;
   final String text;
   final Position position;
+  final double? fontSize;
+  @JsonKey(toJson: colorToJson, fromJson: colorFromJson)
+  final Color? color;
+  @JsonKey(toJson: fontWeightToJson, fromJson: fontWeightFromJson)
+  final FontWeight? fontWeight;
 
   TextWithPosition({
     required this.id,
     required this.text,
     required this.position,
+    required this.fontSize,
+    required this.color,
+    required this.fontWeight,
   });
 
   factory TextWithPosition.fromJson(final Map<String, dynamic> json) =>
@@ -22,5 +31,37 @@ class TextWithPosition extends Equatable {
   Map<String, dynamic> toJson() => _$TextWithPositionToJson(this);
 
   @override
-  List<Object?> get props => [id, text, position];
+  List<Object?> get props => [id, text, position, fontSize, color, fontWeight];
+
+  static String? colorToJson(final Color? color) {
+    return color?.value.toRadixString(16);
+  }
+
+  static Color? colorFromJson(final String? colorString) {
+    if (colorString == null || colorString == "") {
+      return null;
+    }
+    final intColor = int.tryParse(colorString, radix: 16);
+    if (intColor != null) {
+      return Color(intColor);
+    }
+    return null;
+  }
+
+  static int? fontWeightToJson(final FontWeight? value) {
+    if (value == null) {
+      return null;
+    }
+    return value.index;
+  }
+
+  static FontWeight? fontWeightFromJson(final int? value) {
+    if (value == null) {
+      return null;
+    }
+    return FontWeight.values.firstWhere(
+      (element) => element.index == value,
+      orElse: null,
+    );
+  }
 }
