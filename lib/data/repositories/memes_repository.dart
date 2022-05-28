@@ -1,12 +1,10 @@
 import 'dart:convert';
 
-import 'package:collection/collection.dart';
 import 'package:memogenerator/data/models/meme.dart';
+import 'package:memogenerator/data/repositories/list_with_ids_reactive_repository.dart';
 import 'package:memogenerator/data/shared_preference_data.dart';
-import 'package:rxdart/rxdart.dart';
 
-class MemesRepository {
-  final updater = PublishSubject<Null>();
+class MemesRepository extends ListWithIdsReactiveRepository<Meme> {
   final SharedPreferenceData spData;
 
   static MemesRepository? _instance;
@@ -16,46 +14,18 @@ class MemesRepository {
 
   MemesRepository._internal(this.spData);
 
-  Future<bool> addToMemes(final Meme newMeme) async {
-    final memes = await getMemes();
-    final index = memes.indexWhere((meme) => meme.id == newMeme.id);
-    if (index < 0) {
-      memes.add(newMeme);
-    } else {
-      memes[index] = newMeme;
-    }
-    return setMemes(memes);
-  }
+  @override
+  convertFromString(String rawItem) => Meme.fromJson(json.decode(rawItem));
 
-  Future<bool> removeFromMemes(final String id) async {
-    final rawData = await spData.getMemes();
-    rawData.removeWhere((e) => Meme.fromJson(json.decode(e)).id == id);
-    updater.add(null);
-    return spData.setMemes(rawData);
-  }
+  @override
+  String convertToString(item) => json.encode(item.toJson());
 
-  Future<List<Meme>> getMemes() async {
-    return (await spData.getMemes())
-        .map((e) => Meme.fromJson(json.decode(e)))
-        .toList(growable: true);
-  }
+  @override
+  getId(item) => item.id;
 
-  Future<bool> setMemes(final List<Meme> memes) async {
-    updater.add(null);
-    return spData.setMemes(
-      memes.map((e) => json.encode(e.toJson())).toList(growable: false),
-    );
-  }
+  @override
+  Future<List<String>> getRawData() => spData.getMemes();
 
-  Future<Meme?> getMeme(final String id) async {
-    final memes = await getMemes();
-    return memes.firstWhereOrNull((meme) => meme.id == id);
-  }
-
-  Stream<List<Meme>> observeMemes() async* {
-    yield await getMemes();
-    await for (final _ in updater) {
-      yield await getMemes();
-    }
-  }
+  @override
+  Future<bool> saveRawData(List<String> items) => spData.setMemes(items);
 }

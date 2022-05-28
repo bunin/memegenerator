@@ -58,26 +58,9 @@ class _CreateMemePageState extends State<CreateMemePage> {
             ),
             bottom: EditTextBar(),
             actions: [
-              GestureDetector(
-                onTap: bloc.shareScreenshot,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Icon(
-                    Icons.share,
-                    color: AppColors.darkGrey,
-                  ),
-                ),
-              ),
-              GestureDetector(
-                onTap: bloc.saveMeme,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Icon(
-                    Icons.save,
-                    color: AppColors.darkGrey,
-                  ),
-                ),
-              ),
+              AnimatedIconButton(
+                  onTap: bloc.shareScreenshot, icon: Icons.share),
+              AnimatedIconButton(onTap: bloc.saveMeme, icon: Icons.save),
             ],
           ),
           backgroundColor: Colors.white,
@@ -114,6 +97,48 @@ class _CreateMemePageState extends State<CreateMemePage> {
             ],
           );
         });
+  }
+}
+
+class AnimatedIconButton extends StatefulWidget {
+  final VoidCallback onTap;
+  final IconData icon;
+
+  const AnimatedIconButton({
+    Key? key,
+    required this.onTap,
+    required this.icon,
+  }) : super(key: key);
+
+  @override
+  State<AnimatedIconButton> createState() => _AnimatedIconButtonState();
+}
+
+class _AnimatedIconButtonState extends State<AnimatedIconButton> {
+  double scale = 1.0;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () {
+        setState(() => scale = 1.5);
+        widget.onTap();
+      },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: AnimatedScale(
+          curve: Curves.bounceInOut,
+          scale: scale,
+          duration: Duration(milliseconds: 300),
+          child: Icon(
+            widget.icon,
+            color: AppColors.darkGrey,
+            size: 24,
+          ),
+          onEnd: () => setState(() => scale = 1.0),
+        ),
+      ),
+    );
   }
 }
 

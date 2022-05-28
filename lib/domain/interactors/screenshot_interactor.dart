@@ -45,7 +45,7 @@ class ScreenshotInteractor {
     final tempDocs = await getApplicationDocumentsDirectory();
     final imagePath = [
       tempDocs.path,
-      "thumbnails",
+      // "thumbnails",
       memeId + ".png",
     ].join(Platform.pathSeparator);
     final imageFile = File(imagePath);
